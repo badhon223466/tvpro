@@ -18,7 +18,9 @@ import {
   Search,
   Check,
   ChevronDown,
-  MonitorPlay
+  MonitorPlay,
+  RotateCw,
+  Smartphone
 } from 'lucide-react';
 import { Channel, PlaybackSettings } from '../types';
 import ChannelLogo from './ChannelLogo';
@@ -75,6 +77,23 @@ export default function VideoPlayer({
   });
   const [drawerCategory, setDrawerCategory] = useState<string>('All');
   const [showQualityBadge, setShowQualityBadge] = useState<boolean>(false);
+  
+  // Mobile and Landscape States
+  const [isMobile, setIsMobile] = useState<boolean>(false);
+  const [isRotatedLandscape, setIsRotatedLandscape] = useState<boolean>(false);
+
+  useEffect(() => {
+    const handleResize = () => {
+      const mobileAgent = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+      const isNarrow = window.innerWidth < 768;
+      setIsMobile(isNarrow || mobileAgent);
+    };
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+    };
+  }, []);
 
   // Controls auto-hide timeout
   const controlsTimeout = useRef<NodeJS.Timeout | null>(null);
@@ -251,6 +270,41 @@ export default function VideoPlayer({
     resetControlsTimeout();
   };
 
+  // Landscape and rotation handler
+  const handleToggleLandscape = async () => {
+    const nextState = !isRotatedLandscape;
+    setIsRotatedLandscape(nextState);
+
+    // If entering landscape, also try standard fullscreen and orientation locks
+    if (nextState) {
+      const container = containerRef.current;
+      if (container) {
+        if (!document.fullscreenElement) {
+          try {
+            await container.requestFullscreen();
+            setIsFullscreen(true);
+          } catch (e) {
+            console.log("Could not enter native fullscreen:", e);
+          }
+        }
+        if (screen.orientation && (screen.orientation as any).lock) {
+          try {
+            await (screen.orientation as any).lock('landscape');
+          } catch (e) {
+            console.log("Could not lock orientation:", e);
+          }
+        }
+      }
+    } else {
+      if (screen.orientation && (screen.orientation as any).unlock) {
+        try {
+          (screen.orientation as any).unlock();
+        } catch (e) {}
+      }
+    }
+    resetControlsTimeout();
+  };
+
   useEffect(() => {
     const onFullscreenChange = () => {
       setIsFullscreen(!!document.fullscreenElement);
@@ -408,9 +462,23 @@ export default function VideoPlayer({
       ref={containerRef}
       onMouseMove={resetControlsTimeout}
       onClick={() => resetControlsTimeout()}
-      className={`fixed inset-0 z-50 flex items-center justify-center select-none overflow-hidden transition-all duration-300 ${
+      className={`fixed z-50 flex items-center justify-center select-none overflow-hidden transition-all duration-300 ${
         playbackSettings.theme === 'white' ? 'bg-zinc-100' : 'bg-black'
+      } ${
+        isRotatedLandscape 
+          ? 'fixed w-[100vh] h-[100vw] top-1/2 left-1/2' 
+          : 'inset-0'
       }`}
+      style={isRotatedLandscape ? {
+        width: '100vh',
+        height: '100vw',
+        position: 'fixed',
+        top: '50%',
+        left: '50%',
+        transform: 'translate(-50%, -50%) rotate(90deg)',
+        transformOrigin: 'center',
+        zIndex: 99999,
+      } : {}}
     >
       {/* Background glowing ambient light under actual video */}
       <div className="absolute inset-0 bg-radial from-neutral-900/40 via-transparent to-transparent pointer-events-none" />
@@ -688,136 +756,257 @@ export default function VideoPlayer({
         </div>
 
         {/* HUD LOWER CONTAINER */}
-        <div className="flex items-center justify-between w-full">
-          {/* Controls Left side buttons */}
-          <div className="flex items-center gap-3">
-            {/* Prev Channel Shortcut */}
-            <button
-              onClick={() => onNavigateChannel('prev')}
-              className="p-2 text-neutral-300 hover:text-white hover:bg-neutral-900/60 rounded"
-              title="Previous channel shortcut"
-            >
-              <ChevronLeft size={20} />
-            </button>
+        {isMobile ? (
+          <div className="flex flex-col gap-3 w-full bg-neutral-950/60 p-3 rounded-2xl border border-neutral-800/40 backdrop-blur-md">
+            {/* Top row of mobile HUD: Play/Pause/Seek, volume controls, and navigation */}
+            <div className="flex items-center justify-between w-full gap-2">
+              <div className="flex items-center gap-2">
+                {/* Previous channel */}
+                <button
+                  onClick={() => onNavigateChannel('prev')}
+                  className="p-3 bg-neutral-900/90 active:bg-neutral-850 text-neutral-200 rounded-xl border border-neutral-800/80 focus:outline-none"
+                  style={{ minWidth: '44px', minHeight: '44px' }}
+                >
+                  <ChevronLeft size={16} />
+                </button>
 
-            {/* Play/Pause Button */}
-            <button
-              onClick={() => handlePlayPause()}
-              className={`p-2.5 rounded-full ${accentClasses.bg} text-white hover:scale-105 duration-150 shadow-md ${accentClasses.glow}`}
-            >
-              {isPlaying ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" />}
-            </button>
+                {/* Play/Pause */}
+                <button
+                  onClick={() => handlePlayPause()}
+                  className={`p-3 rounded-full ${accentClasses.bg} text-white shadow-lg active:scale-95 duration-100 flex items-center justify-center`}
+                  style={{ minWidth: '44px', minHeight: '44px' }}
+                >
+                  {isPlaying ? <Pause size={16} fill="currentColor" /> : <Play size={16} fill="currentColor" />}
+                </button>
 
-            {/* Next Channel Shortcut */}
-            <button
-              onClick={() => onNavigateChannel('next')}
-              className="p-2 text-neutral-300 hover:text-white hover:bg-neutral-900/60 rounded"
-              title="Next channel shortcut"
-            >
-              <ChevronRight size={20} />
-            </button>
+                {/* Next channel */}
+                <button
+                  onClick={() => onNavigateChannel('next')}
+                  className="p-3 bg-neutral-900/90 active:bg-neutral-850 text-neutral-200 rounded-xl border border-neutral-800/80 focus:outline-none"
+                  style={{ minWidth: '44px', minHeight: '44px' }}
+                >
+                  <ChevronRight size={16} />
+                </button>
+              </div>
 
-            {/* Volume items */}
-            <div className="flex items-center gap-2 ml-2">
+              {/* Volume status button */}
+              <div className="flex items-center gap-2 bg-neutral-900/70 py-1.5 px-2.5 rounded-xl border border-neutral-800/40">
+                <button
+                  onClick={() => updateSettings({ muted: !playbackSettings.muted })}
+                  className="p-1.5 text-neutral-300 focus:outline-none"
+                >
+                  {playbackSettings.muted || playbackSettings.volume === 0 ? <VolumeX size={15} /> : <Volume2 size={15} />}
+                </button>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={playbackSettings.volume}
+                  onChange={(e) => updateSettings({ volume: parseInt(e.target.value), muted: false })}
+                  className={`w-14 h-1 bg-neutral-700/80 rounded-lg appearance-none cursor-pointer ${accentClasses.accent}`}
+                />
+              </div>
+
+              {/* Dropdown quality switcher */}
               <button
-                onClick={() => updateSettings({ muted: !playbackSettings.muted })}
-                className="text-neutral-300 hover:text-white transition-colors"
+                onClick={() => setShowResolutionMenu(!showResolutionMenu)}
+                className="px-2.5 py-2.5 bg-neutral-900/90 border border-neutral-800 text-neutral-300 rounded-xl text-[11px] font-mono font-bold flex items-center gap-1"
+                style={{ minHeight: '44px' }}
               >
-                {playbackSettings.muted || playbackSettings.volume === 0 ? <VolumeX size={18} /> : <Volume2 size={18} />}
+                <span>{channel.resolution || 'Auto'}</span>
+                <ChevronDown size={11} />
               </button>
-              <input
-                type="range"
-                min="0"
-                max="100"
-                value={playbackSettings.volume}
-                onChange={(e) => updateSettings({ volume: parseInt(e.target.value), muted: false })}
-                className={`w-16 h-1 bg-neutral-700/80 rounded-lg appearance-none cursor-pointer outline-none transition-all ${accentClasses.accent}`}
-              />
+            </div>
+
+            {/* Bottom row of mobile HUD: Special feature actions */}
+            <div className="grid grid-cols-4 gap-2 w-full pt-2 border-t border-neutral-900/50">
+              {/* Toggle favorite */}
+              <button
+                onClick={() => onToggleFavorite(channel.id)}
+                className={`flex flex-col items-center justify-center gap-1 py-1 px-1 rounded-xl text-[10px] font-bold transition-all ${
+                  isFavorite
+                    ? 'bg-rose-500/15 border border-rose-500/40 text-rose-500'
+                    : 'bg-neutral-950/80 border border-neutral-850 text-neutral-400'
+                }`}
+                style={{ minHeight: '44px' }}
+              >
+                <Heart size={14} className={isFavorite ? 'fill-rose-500' : ''} />
+                <span>Fav</span>
+              </button>
+
+              {/* Toggle Aspect ratio */}
+              <button
+                onClick={handleToggleAspectRatio}
+                className="flex flex-col items-center justify-center gap-1 py-1 px-1 bg-neutral-950/80 border border-neutral-850 rounded-xl text-[10px] font-bold text-neutral-400"
+                style={{ minHeight: '44px' }}
+              >
+                <Smartphone size={14} className="rotate-90 text-neutral-400" />
+                <span>{getAspectModeLabel()}</span>
+              </button>
+
+              {/* Landscape / Screen rotation toggle toggle with beautiful feedback indicator */}
+              <button
+                onClick={handleToggleLandscape}
+                className={`flex flex-col items-center justify-center gap-1 py-1 px-1 rounded-xl text-[10px] font-bold transition-all ${
+                  isRotatedLandscape
+                    ? 'bg-emerald-600/20 border border-emerald-500/50 text-emerald-400'
+                    : 'bg-neutral-950/80 border border-neutral-850 text-neutral-400'
+                }`}
+                style={{ minHeight: '44px' }}
+                title="Force rotate to landscape"
+              >
+                <RotateCw size={14} className={isRotatedLandscape ? "animate-spin-slow text-emerald-400" : ""} />
+                <span>{isRotatedLandscape ? 'Portrait' : 'Landscape'}</span>
+              </button>
+
+              {/* Fullscreen control */}
+              <button
+                onClick={handleToggleFullscreen}
+                className={`flex flex-col items-center justify-center gap-1 py-1 px-1 rounded-xl text-[10px] font-bold transition-all ${
+                  isFullscreen
+                    ? 'bg-amber-600/20 border border-amber-500/50 text-amber-400'
+                    : 'bg-neutral-950/80 border border-neutral-850 text-neutral-400'
+                }`}
+                style={{ minHeight: '44px' }}
+                title="Toggle Fullscreen"
+              >
+                {isFullscreen ? <Minimize size={14} /> : <Maximize size={14} />}
+                <span>Screen</span>
+              </button>
             </div>
           </div>
+        ) : (
+          <div className="flex items-center justify-between w-full">
+            {/* Controls Left side buttons */}
+            <div className="flex items-center gap-3">
+              {/* Prev Channel Shortcut */}
+              <button
+                onClick={() => onNavigateChannel('prev')}
+                className="p-2 text-neutral-300 hover:text-white hover:bg-neutral-900/60 rounded"
+                title="Previous channel shortcut"
+              >
+                <ChevronLeft size={20} />
+              </button>
 
-          {/* Controls Middle/Right Actions */}
-          <div className="flex items-center gap-1 sm:gap-2">
-            {/* Favorite button */}
-            <button
-              onClick={() => onToggleFavorite(channel.id)}
-              className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-                isFavorite
-                  ? 'bg-rose-500/15 border border-rose-500 text-rose-500'
-                  : 'bg-neutral-900/80 border border-neutral-800 text-neutral-300 hover:text-white hover:border-neutral-700'
-              }`}
-            >
-              <Heart size={14} className={isFavorite ? 'fill-rose-500' : ''} />
-              <span className="hidden sm:inline">Favorite</span>
-            </button>
+              {/* Play/Pause Button */}
+              <button
+                onClick={() => handlePlayPause()}
+                className={`p-2.5 rounded-full ${accentClasses.bg} text-white hover:scale-105 duration-150 shadow-md ${accentClasses.glow}`}
+              >
+                {isPlaying ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" />}
+              </button>
 
-            {/* Info popover toggle */}
-            <button
-              onClick={() => setShowInfo(!showInfo)}
-              className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-                showInfo
-                  ? 'bg-neutral-800 border border-neutral-700 text-white'
-                  : 'bg-neutral-900/80 border border-neutral-800 text-neutral-300 hover:text-white'
-              }`}
-            >
-              <Info size={14} />
-              <span className="hidden sm:inline">Info</span>
-            </button>
+              {/* Next Channel Shortcut */}
+              <button
+                onClick={() => onNavigateChannel('next')}
+                className="p-2 text-neutral-300 hover:text-white hover:bg-neutral-900/60 rounded"
+                title="Next channel shortcut"
+              >
+                <ChevronRight size={20} />
+              </button>
 
-            {/* Last channel swap */}
-            <button
-              onClick={onSwitchToLastChannel}
-              disabled={!hasLastChannel}
-              className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-medium border transition-all ${
-                hasLastChannel
-                  ? 'bg-neutral-900/80 border-neutral-800 text-neutral-300 hover:text-white hover:border-neutral-700'
-                  : 'opacity-40 cursor-not-allowed border-neutral-900 text-neutral-600'
-              }`}
-              title={hasLastChannel ? "Recall Last Watched Channel" : "No previous channel history"}
-            >
-              <RotateCcw size={14} />
-              <span className="hidden sm:inline">Last CH</span>
-            </button>
+              {/* Volume items */}
+              <div className="flex items-center gap-2 ml-2">
+                <button
+                  onClick={() => updateSettings({ muted: !playbackSettings.muted })}
+                  className="text-neutral-300 hover:text-white transition-colors"
+                >
+                  {playbackSettings.muted || playbackSettings.volume === 0 ? <VolumeX size={18} /> : <Volume2 size={18} />}
+                </button>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={playbackSettings.volume}
+                  onChange={(e) => updateSettings({ volume: parseInt(e.target.value), muted: false })}
+                  className={`w-16 h-1 bg-neutral-700/80 rounded-lg appearance-none cursor-pointer outline-none transition-all ${accentClasses.accent}`}
+                />
+              </div>
+            </div>
 
-            {/* Pip window controller */}
-            <button
-              onClick={handleTogglePiP}
-              className="px-3 py-1.5 rounded-md bg-neutral-900/80 border border-neutral-800 text-neutral-300 hover:text-white hover:border-neutral-700 text-xs font-medium inline-flex items-center gap-1"
-              title="Mini Player Picture in Picture"
-            >
-              <span className="hidden sm:inline">PiP</span>
-            </button>
+            {/* Controls Middle/Right Actions */}
+            <div className="flex items-center gap-1 sm:gap-2">
+              {/* Favorite button */}
+              <button
+                onClick={() => onToggleFavorite(channel.id)}
+                className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                  isFavorite
+                    ? 'bg-rose-500/15 border border-rose-500 text-rose-500'
+                    : 'bg-neutral-900/80 border border-neutral-800 text-neutral-300 hover:text-white hover:border-neutral-700'
+                }`}
+              >
+                <Heart size={14} className={isFavorite ? 'fill-rose-500' : ''} />
+                <span className="hidden sm:inline">Favorite</span>
+              </button>
 
-            {/* Aspect Scale toggle */}
-            <button
-              onClick={handleToggleAspectRatio}
-              className="px-3 py-1.5 rounded-md bg-neutral-900/80 border border-neutral-800 text-neutral-300 hover:text-white hover:border-neutral-700 text-xs font-medium inline-flex items-center gap-1"
-              title="Aspect ratio scaling modes"
-            >
-              <span className="hidden sm:inline">Contain:</span>
-              <span className={`font-semibold ${accentClasses.text}`}>{getAspectModeLabel()}</span>
-            </button>
+              {/* Info popover toggle */}
+              <button
+                onClick={() => setShowInfo(!showInfo)}
+                className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                  showInfo
+                    ? 'bg-neutral-800 border border-neutral-700 text-white'
+                    : 'bg-neutral-900/80 border border-neutral-800 text-neutral-300 hover:text-white'
+                }`}
+              >
+                <Info size={14} />
+                <span className="hidden sm:inline">Info</span>
+              </button>
 
-            {/* Resolution dropdown trigger */}
-            <button
-              onClick={() => setShowResolutionMenu(!showResolutionMenu)}
-              className={`px-3 py-1.5 rounded-md bg-neutral-900/80 border border-neutral-800 text-neutral-300 hover:text-white hover:border-neutral-700 text-xs font-mono font-medium flex items-center gap-1`}
-              title="Stream resolution toggle"
-            >
-              <span>{channel.resolution || '1085p'}</span>
-              <ChevronDown size={12} />
-            </button>
+              {/* Last channel swap */}
+              <button
+                onClick={onSwitchToLastChannel}
+                disabled={!hasLastChannel}
+                className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-medium border transition-all ${
+                  hasLastChannel
+                    ? 'bg-neutral-900/80 border-neutral-800 text-neutral-300 hover:text-white hover:border-neutral-700'
+                    : 'opacity-40 cursor-not-allowed border-neutral-900 text-neutral-600'
+                }`}
+                title={hasLastChannel ? "Recall Last Watched Channel" : "No previous channel history"}
+              >
+                <RotateCcw size={14} />
+                <span className="hidden sm:inline">Last CH</span>
+              </button>
 
-            {/* Fullscreen handler */}
-            <button
-              onClick={handleToggleFullscreen}
-              className="p-1 px-2.5 rounded-lg bg-neutral-900/90 hover:bg-neutral-800 text-neutral-300 hover:text-white border border-neutral-800"
-              title="Fullscreen toggle"
-            >
-              {isFullscreen ? <Minimize size={15} /> : <Maximize size={15} />}
-            </button>
+              {/* Pip window controller */}
+              <button
+                onClick={handleTogglePiP}
+                className="px-3 py-1.5 rounded-md bg-neutral-900/80 border border-neutral-800 text-neutral-300 hover:text-white hover:border-neutral-700 text-xs font-medium inline-flex items-center gap-1"
+                title="Mini Player Picture in Picture"
+              >
+                <span className="hidden sm:inline">PiP</span>
+              </button>
+
+              {/* Aspect Scale toggle */}
+              <button
+                onClick={handleToggleAspectRatio}
+                className="px-3 py-1.5 rounded-md bg-neutral-900/80 border border-neutral-800 text-neutral-300 hover:text-white hover:border-neutral-700 text-xs font-medium inline-flex items-center gap-1"
+                title="Aspect ratio scaling modes"
+              >
+                <span className="hidden sm:inline">Contain:</span>
+                <span className={`font-semibold ${accentClasses.text}`}>{getAspectModeLabel()}</span>
+              </button>
+
+              {/* Resolution dropdown trigger */}
+              <button
+                onClick={() => setShowResolutionMenu(!showResolutionMenu)}
+                className={`px-3 py-1.5 rounded-md bg-neutral-900/80 border border-neutral-800 text-neutral-300 hover:text-white hover:border-neutral-700 text-xs font-mono font-medium flex items-center gap-1`}
+                title="Stream resolution toggle"
+              >
+                <span>{channel.resolution || '1085p'}</span>
+                <ChevronDown size={12} />
+              </button>
+
+              {/* Fullscreen handler */}
+              <button
+                onClick={handleToggleFullscreen}
+                className="p-1 px-2.5 rounded-lg bg-neutral-900/90 hover:bg-neutral-800 text-neutral-300 hover:text-white border border-neutral-800"
+                title="Fullscreen toggle"
+              >
+                {isFullscreen ? <Minimize size={15} /> : <Maximize size={15} />}
+              </button>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* SLIDEOUT CHANNELS DRAWER (IMAGE 5 COMPLIANCE) */}
