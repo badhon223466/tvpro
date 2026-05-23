@@ -5,10 +5,34 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Live TV Online</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📺</text></svg>" />
+    
+    <!-- PWA configuration links and icons -->
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#e11d48" />
+    
+    <!-- iOS support files & display flags -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Live TV" />
+    <link rel="apple-touch-icon" href="/icon-512.png" />
+    
+    <!-- Android dynamic application flag -->
+    <meta name="mobile-web-app-capable" content="yes" />
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    
+    <!-- Register dynamic service worker caching layer -->
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js')
+            .then((reg) => console.log('PWA Service Worker online:', reg.scope))
+            .catch((err) => console.error('PWA Registration error:', err));
+        });
+      }
+    </script>
   </body>
 </html>
 
