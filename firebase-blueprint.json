@@ -1,0 +1,48 @@
+{
+  "entities": {
+    "PlaylistSource": {
+      "title": "PlaylistSource",
+      "description": "Custom playlist sources loaded by administrative controls",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "type": { "type": "string" },
+        "channelCount": { "type": "integer" },
+        "loaded": { "type": "boolean" },
+        "active": { "type": "boolean" },
+        "url": { "type": "string" },
+        "content": { "type": "string" }
+      },
+      "required": ["id", "name", "type", "channelCount", "loaded", "active"]
+    },
+    "Channel": {
+      "title": "Channel",
+      "description": "IPTV stream details",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "logo": { "type": "string" },
+        "url": { "type": "string" },
+        "category": { "type": "string" },
+        "sourceId": { "type": "string" },
+        "online": { "type": "boolean" },
+        "tvgId": { "type": "string" },
+        "resolution": { "type": "string" },
+        "country": { "type": "string" }
+      },
+      "required": ["id", "name", "logo", "url", "category", "sourceId", "online"]
+    }
+  },
+  "firestore": {
+    "playlist_sources/{sourceId}": {
+      "schema": "PlaylistSource",
+      "description": "Store all customized IPTV playlists"
+    },
+    "channels/{channelId}": {
+      "schema": "Channel",
+      "description": "Store corresponding cached channel feeds"
+    }
+  }
+}

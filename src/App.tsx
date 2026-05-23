@@ -20,7 +20,9 @@ import {
   X,
   Check,
   Zap,
-  CheckCircle2
+  CheckCircle2,
+  Facebook,
+  ExternalLink
 } from 'lucide-react';
 
 import { Channel, PlaylistSource, PlaybackSettings, VisitorStats } from './types';
@@ -29,6 +31,10 @@ import VideoPlayer from './components/VideoPlayer';
 import AddPlaylistModal, { parseM3U, parseJSON } from './components/AddPlaylistModal';
 import ManageSourcesModal from './components/ManageSourcesModal';
 import ChannelLogo from './components/ChannelLogo';
+
+// Firebase imports
+import { db, handleFirestoreError, OperationType } from './lib/firebase';
+import { doc, setDoc, deleteDoc, writeBatch, collection, getDocs, getDocFromServer } from 'firebase/firestore';
 
 export default function App() {
   // --- Persistent States from LocalStorage ---
@@ -91,6 +97,56 @@ export default function App() {
 
     progressTimer = requestAnimationFrame(updateProgress);
     return () => cancelAnimationFrame(progressTimer);
+  }, []);
+
+  // --- Initialize connection test and fetch from Firestore ---
+  useEffect(() => {
+    async function initFirestore() {
+      // 1. Connection Test (per critical skill guidelines)
+      try {
+        await getDocFromServer(doc(db, 'test', 'connection'));
+      } catch (error) {
+        if (error instanceof Error && error.message.includes('the client is offline')) {
+          console.error("Please check your Firebase configuration.");
+        }
+      }
+
+      // 2. Fetch all custom sources and channels
+      try {
+        const sourcesSnap = await getDocs(collection(db, 'playlist_sources'));
+        const fbSources: PlaylistSource[] = [];
+        sourcesSnap.forEach((d) => {
+          fbSources.push(d.data() as PlaylistSource);
+        });
+
+        const channelsSnap = await getDocs(collection(db, 'channels'));
+        const fbChannels: Channel[] = [];
+        channelsSnap.forEach((d) => {
+          fbChannels.push(d.data() as Channel);
+        });
+
+        if (fbSources.length > 0) {
+          setSources((prev) => {
+            // Keep built-in states, merge backend database sources
+            const builtIns = prev.filter((s) => BUILT_IN_SOURCES.some((b) => b.id === s.id));
+            const filteredFb = fbSources.filter((fs) => !builtIns.some((b) => b.id === fs.id));
+            return [...builtIns, ...filteredFb];
+          });
+        }
+
+        if (fbChannels.length > 0) {
+          setChannels((prev) => {
+            const builtIns = prev.filter((c) => INITIAL_CHANNELS.some((ic) => ic.id === c.id));
+            const filteredFb = fbChannels.filter((fc) => !builtIns.some((b) => b.id === fc.id));
+            return [...builtIns, ...filteredFb];
+          });
+        }
+      } catch (error) {
+        handleFirestoreError(error, OperationType.GET, 'playlist_sources_and_channels');
+      }
+    }
+
+    initFirestore();
   }, []);
 
   // --- Normal UI States ---
@@ -224,33 +280,120 @@ export default function App() {
   };
 
   // Add source action callbacks
-  const handleAddPlaylist = (newSource: PlaylistSource, newChannels: Channel[]) => {
+  const handleAddPlaylist = async (newSource: PlaylistSource, newChannels: Channel[]) => {
     setSources((prev) => [...prev, newSource]);
     setChannels((prev) => [...prev, ...newChannels]);
     setSelectedSourceId(newSource.id);
+
+    try {
+      const cleanSource = {
+        id: newSource.id,
+        name: newSource.name,
+        type: newSource.type,
+        channelCount: newSource.channelCount,
+        loaded: newSource.loaded,
+        active: newSource.active,
+        url: newSource.url || '',
+        content: newSource.content || ''
+      };
+      await setDoc(doc(db, 'playlist_sources', newSource.id), cleanSource);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `playlist_sources/${newSource.id}`);
+    }
+
+    try {
+      const batchSize = 400;
+      for (let i = 0; i < newChannels.length; i += batchSize) {
+        const batch = writeBatch(db);
+        const chunk = newChannels.slice(i, i + batchSize);
+        chunk.forEach((ch) => {
+          const cleanChan = {
+            id: ch.id,
+            name: ch.name || '',
+            logo: ch.logo || '',
+            url: ch.url || '',
+            category: ch.category || 'Other',
+            sourceId: ch.sourceId,
+            online: ch.online !== false,
+            tvgId: ch.tvgId || '',
+            resolution: ch.resolution || '',
+            country: ch.country || ''
+          };
+          batch.set(doc(db, 'channels', ch.id), cleanChan);
+        });
+        await batch.commit();
+      }
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, 'channels/batch');
+    }
   };
 
-  const handleToggleSourceActive = (id: string) => {
+  const handleToggleSourceActive = async (id: string) => {
     setSources((prev) =>
-      prev.map((s) => (s.id === id ? { ...s, active: !s.active } : s))
+      prev.map((s) => {
+        if (s.id === id) {
+          const updated = { ...s, active: !s.active };
+          const isBuiltIn = BUILT_IN_SOURCES.some((b) => b.id === id);
+          if (!isBuiltIn) {
+            const cleanSource = {
+              id: updated.id,
+              name: updated.name,
+              type: updated.type,
+              channelCount: updated.channelCount,
+              loaded: updated.loaded,
+              active: updated.active,
+              url: updated.url || '',
+              content: updated.content || ''
+            };
+            setDoc(doc(db, 'playlist_sources', id), cleanSource).catch((err) => {
+              handleFirestoreError(err, OperationType.WRITE, `playlist_sources/${id}`);
+            });
+          }
+          return updated;
+        }
+        return s;
+      })
     );
   };
 
-  const handleRemoveSource = (id: string) => {
+  const handleRemoveSource = async (id: string) => {
     setSources((prev) => prev.filter((s) => s.id !== id));
     setChannels((prev) => prev.filter((c) => c.sourceId !== id));
     if (selectedSourceId === id) {
       setSelectedSourceId('fancode');
     }
+
+    try {
+      await deleteDoc(doc(db, 'playlist_sources', id));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `playlist_sources/${id}`);
+    }
+
+    try {
+      const toDelete = channels.filter((c) => c.sourceId === id);
+      const batchSize = 400;
+      for (let i = 0; i < toDelete.length; i += batchSize) {
+        const batch = writeBatch(db);
+        const chunk = toDelete.slice(i, i + batchSize);
+        chunk.forEach((ch) => {
+          batch.delete(doc(db, 'channels', ch.id));
+        });
+        await batch.commit();
+      }
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, 'channels/batch_delete');
+    }
   };
 
-  const handleEditSource = (id: string, updatedName: string, updatedUrl?: string, updatedContent?: string) => {
+  const handleEditSource = async (id: string, updatedName: string, updatedUrl?: string, updatedContent?: string) => {
     let finalChannels = [...channels];
     let parsedCount: number | null = null;
+    let newChannelsList: Channel[] = [];
     
     if (updatedContent !== undefined) {
       const isJson = updatedContent.trim().startsWith('{') || updatedContent.trim().startsWith('[');
       const newChannels = isJson ? parseJSON(updatedContent, id) : parseM3U(updatedContent, id);
+      newChannelsList = newChannels;
       parsedCount = newChannels.length;
 
       // Filter out existing channels from this source ID
@@ -262,13 +405,32 @@ export default function App() {
     setSources((prev) =>
       prev.map((s) => {
         if (s.id === id) {
-          return {
+          const updated = {
             ...s,
             name: updatedName,
             url: updatedUrl !== undefined ? updatedUrl : s.url,
             content: updatedContent !== undefined ? updatedContent : s.content,
             channelCount: parsedCount !== null ? parsedCount : s.channelCount,
           };
+
+          const isBuiltIn = BUILT_IN_SOURCES.some((b) => b.id === id);
+          if (!isBuiltIn) {
+            const cleanSource = {
+              id: updated.id,
+              name: updated.name,
+              type: updated.type,
+              channelCount: updated.channelCount,
+              loaded: updated.loaded,
+              active: updated.active,
+              url: updated.url || '',
+              content: updated.content || ''
+            };
+            setDoc(doc(db, 'playlist_sources', id), cleanSource).catch((err) => {
+              handleFirestoreError(err, OperationType.WRITE, `playlist_sources/${id}`);
+            });
+          }
+
+          return updated;
         }
         return s;
       })
@@ -276,6 +438,46 @@ export default function App() {
 
     if (updatedContent !== undefined) {
       setChannels(finalChannels);
+
+      const isBuiltIn = BUILT_IN_SOURCES.some((b) => b.id === id);
+      if (!isBuiltIn) {
+        try {
+          const oldChannels = channels.filter((c) => c.sourceId === id);
+          const deleteBatchSize = 400;
+          for (let i = 0; i < oldChannels.length; i += deleteBatchSize) {
+            const batch = writeBatch(db);
+            const chunk = oldChannels.slice(i, i + deleteBatchSize);
+            chunk.forEach((ch) => {
+              batch.delete(doc(db, 'channels', ch.id));
+            });
+            await batch.commit();
+          }
+
+          const writeBatchSize = 400;
+          for (let i = 0; i < newChannelsList.length; i += writeBatchSize) {
+            const batch = writeBatch(db);
+            const chunk = newChannelsList.slice(i, i + writeBatchSize);
+            chunk.forEach((ch) => {
+              const cleanChan = {
+                id: ch.id,
+                name: ch.name || '',
+                logo: ch.logo || '',
+                url: ch.url || '',
+                category: ch.category || 'Other',
+                sourceId: ch.sourceId,
+                online: ch.online !== false,
+                tvgId: ch.tvgId || '',
+                resolution: ch.resolution || '',
+                country: ch.country || ''
+              };
+              batch.set(doc(db, 'channels', ch.id), cleanChan);
+            });
+            await batch.commit();
+          }
+        } catch (error) {
+          handleFirestoreError(error, OperationType.WRITE, 'channels/edit_batch');
+        }
+      }
     }
   };
 
@@ -495,9 +697,23 @@ export default function App() {
           </div>
 
           {/* User watermark and system footer */}
-          <div className="absolute bottom-8 left-1/2 -translate-x-1/2 text-center text-[10px] tracking-widest font-mono text-neutral-600 space-y-0.5 z-10 select-none">
-            <p className="uppercase">Licensed to <span className="text-neutral-400 font-bold">mdbadhon7734</span></p>
-            <p className="text-[8px] opacity-75">SECURE SANDBOX SESSION • ACTIVE PRO</p>
+          <div className="absolute bottom-8 left-1/2 -translate-x-1/2 text-center text-[10px] tracking-widest font-mono text-neutral-600 space-y-1 z-10">
+            <p className="uppercase select-none">Licensed to <span className="text-neutral-400 font-bold">Md Badhon</span></p>
+            <div className="flex flex-col items-center gap-1 pt-1">
+              <a 
+                href="https://www.facebook.com/MDBADHON0/" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-950/20 hover:bg-blue-900/40 border border-blue-900/30 text-[9px] text-blue-400 hover:text-blue-300 transition-all font-sans cursor-pointer pointer-events-auto shadow-sm"
+              >
+                <Facebook size={11} className="fill-blue-500/10 shrink-0" />
+                <span>Md Badhon</span>
+                <ExternalLink size={9} className="opacity-65 shrink-0" />
+              </a>
+              <p className="text-[8px] opacity-60 select-none uppercase tracking-[0.18em] text-neutral-500 mt-1">
+                SECURE SANDBOX SESSION • ACTIVE PRO
+              </p>
+            </div>
           </div>
         </div>
       )}
