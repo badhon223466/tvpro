@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Radio,
   Search,
@@ -270,6 +270,24 @@ export default function App() {
     }
 
     initFirestore();
+  }, []);
+
+  // --- Horizontal Scrolling Ribbon Ref ---
+  const sourcesRibbonRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    const el = sourcesRibbonRef.current;
+    if (!el) return;
+    const handleWheel = (e: WheelEvent) => {
+      if (e.deltaY !== 0) {
+        e.preventDefault();
+        el.scrollLeft += e.deltaY * 1.2; // slight boost for natural desktop flow scroll speed
+      }
+    };
+    el.addEventListener('wheel', handleWheel, { passive: false });
+    return () => {
+      el.removeEventListener('wheel', handleWheel);
+    };
   }, []);
 
   // --- Normal UI States ---
@@ -927,7 +945,10 @@ export default function App() {
       </header>
 
       {/* 2. PLAYLIST SOURCES HORIZONTAL CAROUSEL TABS ribbon */}
-      <section className={`px-6 py-3 border-b flex items-center overflow-x-auto no-scrollbar gap-2 max-w-full shrink-0 ${themeClasses.subribbon}`}>
+      <section 
+        ref={sourcesRibbonRef}
+        className={`px-6 py-3 border-b flex items-center overflow-x-auto gap-2 max-w-full shrink-0 ${themeClasses.subribbon}`}
+      >
         
         {/* Favorited Channel tab */}
         <button
