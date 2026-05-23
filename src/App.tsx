@@ -111,7 +111,7 @@ export default function App() {
         }
       }
 
-      // 2. Fetch all custom sources and channels
+      // 2. Fetch all custom sources and channels from Firebase
       try {
         const sourcesSnap = await getDocs(collection(db, 'playlist_sources'));
         const fbSources: PlaylistSource[] = [];
@@ -125,6 +125,73 @@ export default function App() {
           fbChannels.push(d.data() as Channel);
         });
 
+        // 3. Bidirectional integration: Detect and synchronize any local custom data that is missing on Firebase
+        const localSourcesRaw = localStorage.getItem('tvpro_sources');
+        const localChannelsRaw = localStorage.getItem('tvpro_channels');
+        
+        let localSources: PlaylistSource[] = [];
+        let localChannels: Channel[] = [];
+        try {
+          localSources = localSourcesRaw ? JSON.parse(localSourcesRaw) : BUILT_IN_SOURCES;
+        } catch (e) {
+          localSources = BUILT_IN_SOURCES;
+        }
+        try {
+          localChannels = localChannelsRaw ? JSON.parse(localChannelsRaw) : INITIAL_CHANNELS;
+        } catch (e) {
+          localChannels = INITIAL_CHANNELS;
+        }
+
+        const localCustomSources = localSources.filter((s) => !BUILT_IN_SOURCES.some((b) => b.id === s.id));
+        const localCustomChannels = localChannels.filter((c) => !INITIAL_CHANNELS.some((ic) => ic.id === c.id));
+
+        // Detect sources that exist locally but are missing on FB
+        const missingSourcesOnFB = localCustomSources.filter((ls) => !fbSources.some((fs) => fs.id === ls.id));
+        if (missingSourcesOnFB.length > 0) {
+          for (const s of missingSourcesOnFB) {
+            const cleanSource = {
+              id: s.id,
+              name: s.name,
+              type: s.type,
+              channelCount: s.channelCount,
+              loaded: s.loaded,
+              active: s.active,
+              url: s.url || '',
+              content: s.content || ''
+            };
+            await setDoc(doc(db, 'playlist_sources', s.id), cleanSource);
+            fbSources.push(cleanSource); // Add so next step knows about it
+          }
+        }
+
+        // Detect channels that exist locally but are missing on FB
+        const missingChannelsOnFB = localCustomChannels.filter((lc) => !fbChannels.some((fc) => fc.id === lc.id));
+        if (missingChannelsOnFB.length > 0) {
+          const batchSize = 400;
+          for (let i = 0; i < missingChannelsOnFB.length; i += batchSize) {
+            const batch = writeBatch(db);
+            const chunk = missingChannelsOnFB.slice(i, i + batchSize);
+            chunk.forEach((ch) => {
+              const cleanChan = {
+                id: ch.id,
+                name: ch.name || '',
+                logo: ch.logo || '',
+                url: ch.url || '',
+                category: ch.category || 'Other',
+                sourceId: ch.sourceId,
+                online: ch.online !== false,
+                tvgId: ch.tvgId || '',
+                resolution: ch.resolution || '',
+                country: ch.country || ''
+              };
+              batch.set(doc(db, 'channels', ch.id), cleanChan);
+              fbChannels.push(cleanChan); // Add so downstream merge takes it
+            });
+            await batch.commit();
+          }
+        }
+
+        // 4. Update memory state with merged global custom channels
         if (fbSources.length > 0) {
           setSources((prev) => {
             const builtIns = prev.filter((s) => BUILT_IN_SOURCES.some((b) => b.id === s.id));
