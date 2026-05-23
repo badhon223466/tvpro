@@ -1,0 +1,6 @@
+{
+  "name": "TVPro",
+  "description": "IPTV Stream Player with customizable playlists, HLS streaming, full-screen hardware-accelerated video playback, customizable channels categories, and theme preferences.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
