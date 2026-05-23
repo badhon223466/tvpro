@@ -196,16 +196,37 @@ export default function App() {
           setSources((prev) => {
             const builtIns = prev.filter((s) => BUILT_IN_SOURCES.some((b) => b.id === s.id));
             const localCustoms = prev.filter((s) => !BUILT_IN_SOURCES.some((b) => b.id === s.id));
+            
+            const updatedBuiltIns = [...builtIns];
             const mergedCustoms = [...localCustoms];
+            
             fbSources.forEach((fs) => {
-              const exIdx = mergedCustoms.findIndex((mc) => mc.id === fs.id);
-              if (exIdx !== -1) {
-                mergedCustoms[exIdx] = fs;
+              const isBuiltIn = BUILT_IN_SOURCES.some((b) => b.id === fs.id);
+              if (isBuiltIn) {
+                const bIdx = updatedBuiltIns.findIndex((b) => b.id === fs.id);
+                if (bIdx !== -1) {
+                  updatedBuiltIns[bIdx] = { ...updatedBuiltIns[bIdx], ...fs };
+                }
               } else {
-                mergedCustoms.push(fs);
+                const exIdx = mergedCustoms.findIndex((mc) => mc.id === fs.id);
+                if (exIdx !== -1) {
+                  mergedCustoms[exIdx] = fs;
+                } else {
+                  mergedCustoms.push(fs);
+                }
               }
             });
-            return [...builtIns, ...mergedCustoms];
+            
+            const allMerged = [...updatedBuiltIns, ...mergedCustoms];
+            const uniqueSources: PlaylistSource[] = [];
+            const seenIds = new Set<string>();
+            for (const s of allMerged) {
+              if (!seenIds.has(s.id)) {
+                seenIds.add(s.id);
+                uniqueSources.push(s);
+              }
+            }
+            return uniqueSources;
           });
         }
 
@@ -213,16 +234,34 @@ export default function App() {
           setChannels((prev) => {
             const builtIns = prev.filter((c) => INITIAL_CHANNELS.some((ic) => ic.id === c.id));
             const localCustoms = prev.filter((c) => !INITIAL_CHANNELS.some((ic) => ic.id === c.id));
+            
+            const updatedBuiltIns = [...builtIns];
             const mergedCustoms = [...localCustoms];
+            
             fbChannels.forEach((fc) => {
-              const exIdx = mergedCustoms.findIndex((mc) => mc.id === fc.id);
-              if (exIdx !== -1) {
-                mergedCustoms[exIdx] = fc;
+              const bIdx = updatedBuiltIns.findIndex((bi) => bi.id === fc.id);
+              if (bIdx !== -1) {
+                updatedBuiltIns[bIdx] = { ...updatedBuiltIns[bIdx], ...fc };
               } else {
-                mergedCustoms.push(fc);
+                const exIdx = mergedCustoms.findIndex((mc) => mc.id === fc.id);
+                if (exIdx !== -1) {
+                  mergedCustoms[exIdx] = fc;
+                } else {
+                  mergedCustoms.push(fc);
+                }
               }
             });
-            return [...builtIns, ...mergedCustoms];
+            
+            const allMerged = [...updatedBuiltIns, ...mergedCustoms];
+            const uniqueChannels: Channel[] = [];
+            const seenIds = new Set<string>();
+            for (const c of allMerged) {
+              if (!seenIds.has(c.id)) {
+                seenIds.add(c.id);
+                uniqueChannels.push(c);
+              }
+            }
+            return uniqueChannels;
           });
         }
       } catch (error) {
