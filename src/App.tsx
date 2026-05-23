@@ -65,6 +65,34 @@ export default function App() {
     return local ? JSON.parse(local) : [];
   });
 
+  // --- Beautiful App Intro Loader State ---
+  const [isInitialLoading, setIsInitialLoading] = useState<boolean>(true);
+  const [loadingProgress, setLoadingProgress] = useState<number>(0);
+
+  // Startup simulator for beautiful intro loader with site name
+  useEffect(() => {
+    let progressTimer: any;
+    const startTime = Date.now();
+    const duration = 1600; // 1.6 seconds loading visual duration
+
+    const updateProgress = () => {
+      const elapsed = Date.now() - startTime;
+      const pct = Math.min(100, Math.round((elapsed / duration) * 100));
+      setLoadingProgress(pct);
+      
+      if (pct < 100) {
+        progressTimer = requestAnimationFrame(updateProgress);
+      } else {
+        setTimeout(() => {
+          setIsInitialLoading(false);
+        }, 200);
+      }
+    };
+
+    progressTimer = requestAnimationFrame(updateProgress);
+    return () => cancelAnimationFrame(progressTimer);
+  }, []);
+
   // --- Normal UI States ---
   const [selectedSourceId, setSelectedSourceId] = useState<string>('fancode');
   const [activeCategory, setActiveCategory] = useState<string>('All');
@@ -92,16 +120,16 @@ export default function App() {
 
   const handleAdminLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    const cleanCode = adminPasscode.trim().toLowerCase();
-    // Default passcodes: "admin", "8899", "8890" for ease of access
-    if (cleanCode === 'admin' || cleanCode === '8899' || cleanCode === '8890') {
+    const entered = adminPasscode.trim();
+    // Strictly require badhon223466
+    if (entered === 'badhon223466') {
       setIsAdmin(true);
       localStorage.setItem('tvpro_is_admin', 'true');
       setShowAdminLoginModal(false);
       setAdminPasscode('');
       setAdminPasscodeError('');
     } else {
-      setAdminPasscodeError('Incorrect passcode. Try "admin" or "8899"');
+      setAdminPasscodeError('Incorrect passcode. Access is restricted to site admin!');
     }
   };
 
@@ -413,6 +441,67 @@ export default function App() {
   return (
     <div className={`min-h-screen flex flex-col font-sans transition-all duration-300 overflow-hidden ${themeClasses.container}`}>
       
+      {/* INITIAL CINEMATIC LOAD SCREEN INTRO */}
+      {isInitialLoading && (
+        <div className="fixed inset-0 z-[99999] bg-[#070a0f] flex flex-col items-center justify-center p-6 select-none overflow-hidden font-sans">
+          
+          {/* Ambient glowing background circles */}
+          <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-red-650/10 rounded-full blur-[100px] pointer-events-none animate-pulse" />
+          <div className="absolute bottom-1/4 left-1/3 w-80 h-80 bg-red-800/5 rounded-full blur-[120px] pointer-events-none animate-pulse" />
+
+          {/* Centered Logo container */}
+          <div className="flex flex-col items-center text-center max-w-sm z-10">
+            {/* Glowing active Radar icon logo */}
+            <div className="relative mb-6">
+              <div className="absolute inset-0 bg-red-650/20 rounded-3xl blur-xl animate-pulse" />
+              <div className="relative h-16 w-16 bg-red-650 rounded-2xl flex items-center justify-center text-white scale-100 shadow-[0_0_30px_rgba(220,38,38,0.3)] border border-red-500/20">
+                <Radio size={32} className="stroke-[2.5]" />
+              </div>
+            </div>
+
+            {/* Site Name and Slogan */}
+            <div className="space-y-1.5">
+              <h1 className="text-3xl font-black tracking-widest text-white uppercase font-sans flex items-center justify-center gap-1">
+                <span className="text-red-500 font-extrabold pr-2 border-r border-neutral-800">TV</span>
+                <span className="tracking-tighter font-extrabold">Pro</span>
+                <span className="text-[10px] bg-red-650 text-white font-black tracking-widest uppercase px-1.5 py-0.5 rounded ml-1">
+                  PREMIUM
+                </span>
+              </h1>
+              <p className="text-[10px] text-neutral-400 font-bold uppercase tracking-[0.22em]">
+                Elite IPTV Stream Engine
+              </p>
+            </div>
+
+            {/* Custom Interactive Progress Bar */}
+            <div className="w-60 mt-10 space-y-2">
+              <div className="h-[3px] w-full bg-neutral-900 border border-neutral-850/30 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-gradient-to-r from-red-600 via-rose-500 to-red-650 rounded-full transition-all duration-100 ease-out"
+                  style={{ width: `${loadingProgress}%` }}
+                />
+              </div>
+              
+              {/* Dynamic Loading Logs */}
+              <div className="flex justify-between items-center text-[9px] font-mono text-neutral-500">
+                <span className="uppercase tracking-wider font-bold">
+                  {loadingProgress < 40 ? 'Initializing Decoders...' :
+                   loadingProgress < 75 ? 'Parsing Playlists...' :
+                   loadingProgress < 95 ? 'Caching Stream Links...' : 'System Ready ✓'}
+                </span>
+                <span className="font-extrabold text-neutral-400">{loadingProgress}%</span>
+              </div>
+            </div>
+          </div>
+
+          {/* User watermark and system footer */}
+          <div className="absolute bottom-8 left-1/2 -translate-x-1/2 text-center text-[10px] tracking-widest font-mono text-neutral-600 space-y-0.5 z-10 select-none">
+            <p className="uppercase">Licensed to <span className="text-neutral-400 font-bold">mdbadhon7734</span></p>
+            <p className="text-[8px] opacity-75">SECURE SANDBOX SESSION • ACTIVE PRO</p>
+          </div>
+        </div>
+      )}
+
       {/* 1. TOP NAV BAR SECTION */}
       <header className={`border-b shrink-0 flex flex-col sm:flex-row items-center justify-between p-4 px-6 gap-3 z-30 transition-all ${themeClasses.header}`}>
         
@@ -1116,7 +1205,7 @@ export default function App() {
 
             <div className="mt-5 pt-4 border-t border-neutral-900 text-center">
               <span className="text-[10px] text-neutral-500 font-mono tracking-wide">
-                💡 Default passcode: <span className="text-emerald-500 font-bold font-mono">admin</span> or <span className="text-emerald-500 font-bold font-mono">8899</span>
+                🔐 Access authorized for verified system administrators only.
               </span>
             </div>
           </div>
