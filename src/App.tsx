@@ -127,18 +127,35 @@ export default function App() {
 
         if (fbSources.length > 0) {
           setSources((prev) => {
-            // Keep built-in states, merge backend database sources
             const builtIns = prev.filter((s) => BUILT_IN_SOURCES.some((b) => b.id === s.id));
-            const filteredFb = fbSources.filter((fs) => !builtIns.some((b) => b.id === fs.id));
-            return [...builtIns, ...filteredFb];
+            const localCustoms = prev.filter((s) => !BUILT_IN_SOURCES.some((b) => b.id === s.id));
+            const mergedCustoms = [...localCustoms];
+            fbSources.forEach((fs) => {
+              const exIdx = mergedCustoms.findIndex((mc) => mc.id === fs.id);
+              if (exIdx !== -1) {
+                mergedCustoms[exIdx] = fs;
+              } else {
+                mergedCustoms.push(fs);
+              }
+            });
+            return [...builtIns, ...mergedCustoms];
           });
         }
 
         if (fbChannels.length > 0) {
           setChannels((prev) => {
             const builtIns = prev.filter((c) => INITIAL_CHANNELS.some((ic) => ic.id === c.id));
-            const filteredFb = fbChannels.filter((fc) => !builtIns.some((b) => b.id === fc.id));
-            return [...builtIns, ...filteredFb];
+            const localCustoms = prev.filter((c) => !INITIAL_CHANNELS.some((ic) => ic.id === c.id));
+            const mergedCustoms = [...localCustoms];
+            fbChannels.forEach((fc) => {
+              const exIdx = mergedCustoms.findIndex((mc) => mc.id === fc.id);
+              if (exIdx !== -1) {
+                mergedCustoms[exIdx] = fc;
+              } else {
+                mergedCustoms.push(fc);
+              }
+            });
+            return [...builtIns, ...mergedCustoms];
           });
         }
       } catch (error) {
