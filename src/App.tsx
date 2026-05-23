@@ -273,7 +273,7 @@ export default function App() {
   }, []);
 
   // --- Normal UI States ---
-  const [selectedSourceId, setSelectedSourceId] = useState<string>('fancode');
+  const [selectedSourceId, setSelectedSourceId] = useState<string>('favorites');
   const [activeCategory, setActiveCategory] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState<string>('');
   
@@ -659,6 +659,7 @@ export default function App() {
   // Filter channels on search query & selected category list
   const filteredChannelsOnDisplay = sourceChannels.filter((c) => {
     const matchesCategory =
+      searchQuery.trim() !== '' ||
       activeCategory === 'All' ||
       (activeCategory === 'Online' && c.online !== false) ||
       (activeCategory === 'Offline' && c.online === false) ||
@@ -1152,7 +1153,7 @@ export default function App() {
                   <div
                     key={c.id}
                     onClick={() => handleSetSelectedChannel(c)}
-                    className={`group relative flex flex-col justify-between overflow-hidden cursor-pointer p-4 rounded-xl border aspect-square transition-all duration-300 select-none ${themeClasses.card} ${colorsAccent.cardHover} ${c.online === false ? 'opacity-85 border-red-950/60' : ''}`}
+                    className={`group relative flex flex-col justify-between overflow-hidden cursor-pointer p-3 sm:p-4 rounded-xl border min-h-[250px] transition-all duration-300 select-none ${themeClasses.card} ${colorsAccent.cardHover} ${c.online === false ? 'opacity-85 border-red-950/60' : ''}`}
                   >
                     {/* Top Row: Country on left, Premium status/Fav state on right */}
                     <div className="flex items-center justify-between w-full gap-2 shrink-0">
@@ -1178,13 +1179,13 @@ export default function App() {
                     </div>
 
                     {/* Middle Row: Massive sports/channel logo frame */}
-                    <div className="my-3.5 flex flex-col items-center justify-center p-3 rounded-2xl bg-slate-950/50 group-hover:bg-slate-950/80 border border-neutral-900/60 flex-1 relative overflow-hidden transition-all duration-300">
+                    <div className="my-3 flex flex-col items-center justify-center p-3 rounded-2xl bg-slate-950/50 group-hover:bg-slate-950/80 border border-neutral-900/60 flex-1 h-24 relative overflow-hidden transition-all duration-300">
                       <div className="absolute inset-0 bg-gradient-to-b from-neutral-900/40 via-transparent to-neutral-950/20 pointer-events-none" />
                       <div className="relative z-10 text-center flex flex-col items-center justify-center w-full h-full">
                         <ChannelLogo 
                           logo={c.logo} 
                           name={c.name} 
-                          className="max-h-16 max-w-[85%] object-contain rounded-lg drop-shadow-md transition duration-350 transform group-hover:scale-110"
+                          className="max-h-20 max-w-full object-contain rounded-lg drop-shadow-md transition duration-350 transform group-hover:scale-110"
                           fallbackClassName="text-3xl drop-shadow-lg font-bold font-sans text-neutral-400 select-none transition duration-350 transform group-hover:scale-110"
                         />
                       </div>
